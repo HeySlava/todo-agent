@@ -113,7 +113,7 @@ async def echo_handler(message: Message) -> None:
 async def run_pending_tasks(bot: Bot) -> None:
     while True:
         tasks = storage.all()
-        logger.info(f'Всего запланировано задач {len(tasks)}')
+        logger.debug(f'Всего запланировано задач {len(tasks)}')
         now = ai.now_moscow()
         for task in tasks:
             execution_datetime = dt.datetime.strptime(
