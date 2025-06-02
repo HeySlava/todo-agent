@@ -120,7 +120,9 @@ async def run_pending_tasks(bot: Bot) -> None:
                     task.date,
                     ai.TIME_FORMAT,
                 )
-            execution_datetime = execution_datetime.astimezone(ai.MOSCOW_TZ)
+            execution_datetime = execution_datetime.replace(
+                    tzinfo=ai.MOSCOW_TZ,
+                )
             if now > execution_datetime:
                 kb = InlineKeyboardBuilder()
                 kb.button(
@@ -128,7 +130,6 @@ async def run_pending_tasks(bot: Bot) -> None:
                         callback_data='1',
                     )
                 markup = kb.as_markup()
-                print(markup)
                 await bot.send_message(
                         chat_id=user_id,
                         text=task.summary,

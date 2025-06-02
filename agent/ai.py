@@ -62,9 +62,4 @@ def categorize(input_: str) -> dict[str, Any]:
         instructions=instructions,
         input=input_,
     )
-
     return json.loads(response.output_text)
-
-
-if __name__ == '__main__':
-    categorize('купи пива')
