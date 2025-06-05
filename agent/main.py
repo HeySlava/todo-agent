@@ -1,11 +1,14 @@
 import asyncio
 import datetime as dt
+import functools
+import json
 import logging
 import os
 import sys
 import uuid
 from pathlib import Path
 from typing import Any
+from typing import Optional
 
 import ffmpeg
 from aiogram import Bot
@@ -22,7 +25,7 @@ from agent import ai
 from agent import todo
 
 TOKEN = os.environ['TELEGRAM_TOKEN']
-user_id = os.environ['ADMIN_ID']
+user_id = int(os.environ['ADMIN_ID'])
 
 dp = Dispatcher()
 
@@ -79,34 +82,65 @@ mapping = {
     }
 
 
+async def send_and_delete(
+        bot: Bot,
+        chat_id: int,
+        text: str,
+        parse_mode: Optional[ParseMode] = None,
+        sleep: int = 5,
+) -> None:
+    response = await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode=parse_mode,
+        )
+    await asyncio.sleep(sleep)
+    await bot.delete_message(
+            chat_id=user_id,
+            message_id=response.message_id,
+        )
+
+
 @dp.message(F.voice)
 async def echo_handler(message: Message) -> None:
+
     assert message.voice
     assert message.bot
+    _msg = functools.partial(
+            send_and_delete,
+            bot=message.bot,
+            chat_id=user_id,
+        )
     dest_file = INPUT_AUDIO_FOLDER / f'{message.message_id}.ogg'
     output_file = CONVERTED_AUDIO_FOLDER / f'{message.message_id}.mp3'
 
+    await _msg(text='Качаю файл для дальнейшей конвертации')
     await message.bot.download(message.voice.file_id, destination=dest_file)
+    await _msg(text='Запускаю ffmpeg')
     ffmpeg.input(dest_file.as_posix()).output(output_file.as_posix()).run()
+    await _msg(text='Отправляю файл на транскрибацию')
     transcription = ai.convert_audio_to_text(output_file.as_posix())
+    await _msg(
+            text=(
+                'Текст который я получил от транскрибатора:\n\n'
+                f'{transcription!r}'
+            )
+        )
 
+    await _msg(text='Отправляю файл на категоризацию')
     json_ = ai.categorize(transcription)
-    text = f'```json\n{str(json_)}```'
+    json_str = json.dumps(json_, indent=2, ensure_ascii=False)
+    text = f'```json\n{json_str}```'
 
-    response = await message.answer(text, parse_mode=ParseMode.MARKDOWN_V2)
+    await _msg(text=text, parse_mode=ParseMode.MARKDOWN_V2, sleep=30)
     if json_['task'] in mapping:
         mapping[json_['task']](json_)
     else:
         await message.answer(f'Ничего не создал: {json_}')
 
-    await asyncio.sleep(15)
     await message.bot.delete_message(
             chat_id=user_id,
             message_id=message.message_id,
-        )
-    await message.bot.delete_message(
-            chat_id=user_id,
-            message_id=response.message_id,
         )
 
 
