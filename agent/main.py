@@ -87,7 +87,7 @@ async def send_and_delete(
         chat_id: int,
         text: str,
         parse_mode: Optional[ParseMode] = None,
-        sleep: int = 5,
+        sleep: int = 1,
 ) -> None:
     response = await bot.send_message(
             chat_id=chat_id,
