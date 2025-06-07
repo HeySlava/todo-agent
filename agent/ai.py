@@ -8,7 +8,7 @@ from openai import OpenAI
 
 
 MOSCOW_TZ = ZoneInfo('Europe/Moscow')
-TIME_FORMAT = '%A, %d.%m.%Y %H:%M'
+TIME_FORMAT = '%d.%m.%Y %H:%M'
 
 
 def now_moscow() -> dt.datetime:
