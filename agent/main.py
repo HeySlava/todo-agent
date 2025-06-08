@@ -103,45 +103,51 @@ async def send_and_delete(
 
 @dp.message(F.voice)
 async def echo_handler(message: Message) -> None:
-
     assert message.voice
     assert message.bot
+    responses = []
     _msg = functools.partial(
-            send_and_delete,
-            bot=message.bot,
+            message.bot.send_message,
             chat_id=user_id,
         )
     dest_file = INPUT_AUDIO_FOLDER / f'{message.message_id}.ogg'
     output_file = CONVERTED_AUDIO_FOLDER / f'{message.message_id}.mp3'
 
-    await _msg(text='Качаю файл для дальнейшей конвертации')
+    responses.append(await _msg(text='Качаю файл для дальнейшей конвертации'))
     await message.bot.download(message.voice.file_id, destination=dest_file)
-    await _msg(text='Запускаю ffmpeg')
+    responses.append(await _msg(text='Запускаю ffmpeg'))
     ffmpeg.input(dest_file.as_posix()).output(output_file.as_posix()).run()
-    await _msg(text='Отправляю файл на транскрибацию')
+    responses.append(await _msg(text='Отправляю файл на транскрибацию'))
     transcription = ai.convert_audio_to_text(output_file.as_posix())
-    await _msg(
-            text=(
-                'Текст который я получил от транскрибатора:\n\n'
-                f'{transcription!r}'
+    responses.append(
+            await _msg(
+                text=(
+                    'Текст который я получил от транскрибатора:\n\n'
+                    f'{transcription!r}'
+                )
             )
         )
 
-    await _msg(text='Отправляю файл на категоризацию')
+    responses.append(await _msg(text='Отправляю файл на категоризацию'))
     json_ = ai.categorize(transcription)
     json_str = json.dumps(json_, indent=2, ensure_ascii=False)
     text = f'```json\n{json_str}```'
 
-    await _msg(text=text, parse_mode=ParseMode.MARKDOWN_V2, sleep=30)
+    responses.append(
+            await _msg(text=text, parse_mode=ParseMode.MARKDOWN_V2)
+        )
     if json_['task'] in mapping:
         mapping[json_['task']](json_)
     else:
         await message.answer(f'Ничего не создал: {json_}')
 
-    await message.bot.delete_message(
-            chat_id=user_id,
-            message_id=message.message_id,
-        )
+    await asyncio.sleep(30)
+
+    for res in responses:
+        await message.bot.delete_message(
+                chat_id=user_id,
+                message_id=res.message_id,
+            )
 
 
 async def run_pending_tasks(bot: Bot) -> None:
