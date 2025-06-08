@@ -102,7 +102,7 @@ async def send_and_delete(
 
 
 @dp.message(F.voice)
-async def echo_handler(message: Message) -> None:
+async def voice_command_handler(message: Message) -> None:
     assert message.voice
     assert message.bot
     responses = []
@@ -140,6 +140,7 @@ async def echo_handler(message: Message) -> None:
         mapping[json_['task']](json_)
     else:
         await message.answer(f'Ничего не создал: {json_}')
+    responses.append(message)
 
     await asyncio.sleep(30)
 
