@@ -119,31 +119,19 @@ async def voice_command_handler(message: Message) -> None:
     ffmpeg.input(dest_file.as_posix()).output(output_file.as_posix()).run()
     responses.append(await _msg(text='Отправляю файл на транскрибацию'))
     transcription = ai.convert_audio_to_text(output_file.as_posix())
-    responses.append(
-            await _msg(
-                text=(
-                    'Текст который я получил от транскрибатора:\n\n'
-                    f'{transcription!r}'
-                )
-            )
-        )
-
     responses.append(await _msg(text='Отправляю файл на категоризацию'))
     json_ = ai.categorize(transcription)
+    responses.append(await _msg(text='Получил ответ от категоризации'))
     json_str = json.dumps(json_, indent=2, ensure_ascii=False)
     text = f'```json\n{json_str}```'
-
     responses.append(
             await _msg(text=text, parse_mode=ParseMode.MARKDOWN_V2)
         )
     if json_['task'] in mapping:
         mapping[json_['task']](json_)
-    else:
-        await message.answer(f'Ничего не создал: {json_}')
     responses.append(message)
 
     await asyncio.sleep(30)
-
     for res in responses:
         await message.bot.delete_message(
                 chat_id=user_id,

@@ -62,12 +62,12 @@ def categorize(input_: str) -> dict[str, Any]:
     )
     try:
         res = json.loads(response.output_text)
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         res = {
                 'task': 'unknown',
                 'payload': {
                     'summary': (
-                        f'I have got error during categorize {e} '
+                        f'I have got json.JSONDecodeError '
                         f'for {response.output_text}'
                     )
                 }
