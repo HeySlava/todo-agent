@@ -14,6 +14,7 @@ import ffmpeg
 from aiogram import Bot
 from aiogram import Dispatcher
 from aiogram import F
+from aiogram import html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
@@ -119,13 +120,15 @@ async def voice_command_handler(message: Message) -> None:
     ffmpeg.input(dest_file.as_posix()).output(output_file.as_posix()).run()
     responses.append(await _msg(text='Отправляю файл на транскрибацию'))
     transcription = ai.convert_audio_to_text(output_file.as_posix())
+    responses.append(
+            await _msg(text=html.pre_language(transcription, 'JSON')),
+        )
     responses.append(await _msg(text='Отправляю файл на категоризацию'))
     json_ = ai.categorize(transcription)
     responses.append(await _msg(text='Получил ответ от категоризации'))
     json_str = json.dumps(json_, indent=2, ensure_ascii=False)
-    text = f'```json\n{json_str}```'
     responses.append(
-            await _msg(text=text, parse_mode=ParseMode.MARKDOWN_V2)
+            await _msg(text=html.pre_language(json_str, 'JSON')),
         )
     if json_['task'] in mapping:
         mapping[json_['task']](json_)
