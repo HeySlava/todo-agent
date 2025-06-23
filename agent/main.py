@@ -56,7 +56,7 @@ def do_it(payload: dict[str, Any]) -> None:
 
 
 def remember(payload: dict[str, Any]) -> None:
-    summary = payload['payload']
+    summary = payload['payload']['summary']
     now = ai.now_moscow()
     intervals = [
             dt.timedelta(minutes=15),
