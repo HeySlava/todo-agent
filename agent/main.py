@@ -60,10 +60,10 @@ def remember(payload: dict[str, Any]) -> None:
     now = ai.now_moscow()
     intervals = [
             dt.timedelta(minutes=15),
-            dt.timedelta(hours=10),
-            dt.timedelta(hours=27),
-            dt.timedelta(days=4),
-            dt.timedelta(days=15),
+            dt.timedelta(days=1),
+            dt.timedelta(days=3),
+            dt.timedelta(days=7),
+            dt.timedelta(days=14),
             dt.timedelta(days=30),
         ]
     for interval in intervals:
