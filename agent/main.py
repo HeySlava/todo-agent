@@ -14,6 +14,7 @@ from aiogram import html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
+from aiogram.filters import Filter
 from aiogram.types import CallbackQuery
 from aiogram.types import Message
 from aiogram.utils.formatting import as_marked_list
@@ -39,9 +40,21 @@ CONVERTED_AUDIO_FOLDER.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__file__)
 
 
+class IsAdmin(Filter):
+    async def __call__(self, message: Message) -> bool:
+        if (
+                message.from_user and
+                message.from_user.id and
+                message.from_user.id == user_id
+        ):
+            return True
+        return False
+
+
 @dp.message(CommandStart())
+@dp.message(IsAdmin())
 async def command_start_handler(message: Message) -> None:
-    await message.answer('Это твой личный бот-ассистент')
+    await message.answer('Это личный бот-ассистент')
 
 
 async def send_and_delete(
@@ -64,6 +77,7 @@ async def send_and_delete(
 
 
 @dp.message(F.voice)
+@dp.message(IsAdmin())
 async def voice_command_handler(message: Message) -> None:
     assert message.voice
     assert message.bot
@@ -145,6 +159,7 @@ async def run_pending_tasks(bot: Bot) -> None:
 
 
 @dp.callback_query()
+@dp.message(IsAdmin())
 async def handle_template_manager_cb(
         cb: CallbackQuery,
 ) -> None:
