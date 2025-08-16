@@ -16,6 +16,7 @@ from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery
 from aiogram.types import Message
+from aiogram.utils.formatting import as_marked_list
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
@@ -24,6 +25,7 @@ from agent import ai
 from agent import utils
 from agent.todo import HERE
 from agent.todo import storage
+from agent.todo import Task
 
 TOKEN = os.environ['TELEGRAM_TOKEN']
 user_id = int(os.environ['ADMIN_ID'])
@@ -107,6 +109,11 @@ async def voice_command_handler(message: Message) -> None:
             )
 
 
+def _make_text(task: Task) -> str:
+    ul_lst = as_marked_list(*task.details, marker='• ').as_html()
+    return f'{html.bold(task.summary)}\n\n{ul_lst}'
+
+
 async def run_pending_tasks(bot: Bot) -> None:
     while True:
         tasks = storage.all()
@@ -129,7 +136,7 @@ async def run_pending_tasks(bot: Bot) -> None:
                 markup = kb.as_markup()
                 await bot.send_message(
                         chat_id=user_id,
-                        text=task.summary,
+                        text=_make_text(task),
                         reply_markup=markup,
                         disable_notification=False,
                     )
