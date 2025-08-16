@@ -1,13 +1,9 @@
 import asyncio
 import datetime as dt
 import functools
-import json
 import logging
 import os
 import sys
-import uuid
-from pathlib import Path
-from typing import Any
 from typing import Optional
 
 import ffmpeg
@@ -18,69 +14,47 @@ from aiogram import html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
+from aiogram.filters import Filter
 from aiogram.types import CallbackQuery
 from aiogram.types import Message
+from aiogram.utils.formatting import as_marked_list
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import SystemMessage
 
 from agent import ai
-from agent import todo
+from agent import utils
+from agent.todo import HERE
+from agent.todo import storage
+from agent.todo import Task
 
 TOKEN = os.environ['TELEGRAM_TOKEN']
 user_id = int(os.environ['ADMIN_ID'])
 
 dp = Dispatcher()
 
-HERE = Path.cwd() / 'files'
 INPUT_AUDIO_FOLDER = HERE / 'input_voice'
 INPUT_AUDIO_FOLDER.mkdir(parents=True, exist_ok=True)
 CONVERTED_AUDIO_FOLDER = HERE / 'converted_voice'
 CONVERTED_AUDIO_FOLDER.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__file__)
-storage = todo.Todo(HERE)
+
+
+class IsAdmin(Filter):
+    async def __call__(self, message: Message) -> bool:
+        if (
+                message.from_user and
+                message.from_user.id and
+                message.from_user.id == user_id
+        ):
+            return True
+        return False
 
 
 @dp.message(CommandStart())
+@dp.message(IsAdmin())
 async def command_start_handler(message: Message) -> None:
-    await message.answer(
-            'Это бот Славы, который планирует за него задачи',
-        )
-
-
-def do_it(payload: dict[str, Any]) -> None:
-    task = todo.Task(
-            name=str(uuid.uuid4()),
-            summary=payload['payload']['summary'],
-            date=payload['payload']['date'],
-        )
-    storage.add(task)
-
-
-def remember(payload: dict[str, Any]) -> None:
-    summary = payload['payload']['summary']
-    now = ai.now_moscow()
-    intervals = [
-            dt.timedelta(minutes=15),
-            dt.timedelta(days=1),
-            dt.timedelta(days=3),
-            dt.timedelta(days=7),
-            dt.timedelta(days=14),
-            dt.timedelta(days=30),
-        ]
-    for interval in intervals:
-        date_ = (now + interval).strftime(ai.TIME_FORMAT)
-        task = todo.Task(
-                summary=summary,
-                name=str(uuid.uuid4()),
-                date=date_,
-            )
-        storage.add(task)
-        logger.info(f'Запланировал задачу на {date_}')
-
-
-mapping = {
-        'todo': do_it,
-        'remember': remember,
-    }
+    await message.answer('Это личный бот-ассистент')
 
 
 async def send_and_delete(
@@ -103,6 +77,7 @@ async def send_and_delete(
 
 
 @dp.message(F.voice)
+@dp.message(IsAdmin())
 async def voice_command_handler(message: Message) -> None:
     assert message.voice
     assert message.bot
@@ -120,19 +95,25 @@ async def voice_command_handler(message: Message) -> None:
     ffmpeg.input(dest_file.as_posix()).output(output_file.as_posix()).run()
     responses.append(await _msg(text='Отправляю файл на транскрибацию'))
     transcription = ai.convert_audio_to_text(output_file.as_posix())
-    responses.append(
-            await _msg(text=html.pre_language(transcription, 'JSON')),
+    responses.append(await _msg(text='Запускаю агента'))
+    from agent.prompts import SYSTEM_PROMPT
+    for s in ai.agent.stream(
+            {
+                'messages':
+                [
+                    SystemMessage(
+                        SYSTEM_PROMPT.format(datetime=utils.now_moscow()),
+                    ),
+                    HumanMessage(transcription),
+                ],
+            },
+            stream_mode='values'
+    ):
+        last_msg = s['messages'][-1]
+        msg = last_msg.pretty_repr()
+        responses.append(
+                await _msg(text=html.pre_language(msg, 'JSON')),
         )
-    responses.append(await _msg(text='Отправляю файл на категоризацию'))
-    json_ = ai.categorize(transcription)
-    responses.append(await _msg(text='Получил ответ от категоризации'))
-    json_str = json.dumps(json_, indent=2, ensure_ascii=False)
-    responses.append(
-            await _msg(text=html.pre_language(json_str, 'JSON')),
-        )
-    if json_['task'] in mapping:
-        mapping[json_['task']](json_)
-    responses.append(message)
 
     await asyncio.sleep(30)
     for res in responses:
@@ -142,18 +123,23 @@ async def voice_command_handler(message: Message) -> None:
             )
 
 
+def _make_text(task: Task) -> str:
+    ul_lst = as_marked_list(*task.details, marker='• ').as_html()
+    return f'{html.bold(task.summary)}\n\n{ul_lst}'
+
+
 async def run_pending_tasks(bot: Bot) -> None:
     while True:
         tasks = storage.all()
         logger.debug(f'Всего запланировано задач {len(tasks)}')
-        now = ai.now_moscow()
+        now = utils.now_moscow()
         for task in tasks:
             execution_datetime = dt.datetime.strptime(
                     task.date,
-                    ai.TIME_FORMAT,
+                    utils.TIME_FORMAT,
                 )
             execution_datetime = execution_datetime.replace(
-                    tzinfo=ai.MOSCOW_TZ,
+                    tzinfo=utils.MOSCOW_TZ,
                 )
             if now > execution_datetime:
                 kb = InlineKeyboardBuilder()
@@ -164,7 +150,7 @@ async def run_pending_tasks(bot: Bot) -> None:
                 markup = kb.as_markup()
                 await bot.send_message(
                         chat_id=user_id,
-                        text=task.summary,
+                        text=_make_text(task),
                         reply_markup=markup,
                         disable_notification=False,
                     )
@@ -173,6 +159,7 @@ async def run_pending_tasks(bot: Bot) -> None:
 
 
 @dp.callback_query()
+@dp.message(IsAdmin())
 async def handle_template_manager_cb(
         cb: CallbackQuery,
 ) -> None:
