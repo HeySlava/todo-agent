@@ -1,18 +1,25 @@
 import json
+import logging
 from pathlib import Path
 from typing import Any
 from typing import NamedTuple
 
 
+HERE = Path.cwd() / 'files'
+logger = logging.getLogger(__file__)
+
+
 class Task(NamedTuple):
-    name: str
+    id_: str
     date: str
     summary: str
+    details: list[str]
 
     def as_dict(self) -> dict[str, Any]:
         return {
                 'date': self.date,
                 'summary': self.summary,
+                'details': self.details,
             }
 
 
@@ -25,13 +32,13 @@ class Todo:
         self.archive_directory.mkdir(parents=True, exist_ok=True)
 
     def add(self, task: Task) -> None:
-        filename = self.pending_directory / f'{task.name}.json'
+        filename = self.pending_directory / f'{task.id_}.json'
         with open(filename, 'w') as f:
             json.dump(task.as_dict(), f, indent=4, ensure_ascii=False)
 
     def archive(self, task: Task) -> None:
-        task_name = self.pending_directory / f'{task.name}.json'
-        task_name.rename(self.archive_directory / f'{task.name}.json')
+        task_name = self.pending_directory / f'{task.id_}.json'
+        task_name.rename(self.archive_directory / f'{task.id_}.json')
 
     def all(self) -> list[Task]:
         files = [f for f in self.pending_directory.glob('*.json')]
@@ -41,9 +48,13 @@ class Todo:
                 data = json.load(fp)
             tasks.append(
                     Task(
-                        name=f.stem,
+                        id_=f.stem,
                         date=data['date'],
                         summary=data['summary'],
+                        details=data.get('details', [])
                     ),
                 )
         return tasks
+
+
+storage = Todo(HERE)
