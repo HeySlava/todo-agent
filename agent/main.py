@@ -17,7 +17,6 @@ from aiogram.filters import CommandStart
 from aiogram.filters import Filter
 from aiogram.types import CallbackQuery
 from aiogram.types import Message
-from aiogram.utils.formatting import as_marked_list
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
@@ -51,12 +50,6 @@ class IsAdmin(Filter):
         return False
 
 
-@dp.message(CommandStart())
-@dp.message(IsAdmin())
-async def command_start_handler(message: Message) -> None:
-    await message.answer('Это личный бот-ассистент')
-
-
 async def send_and_delete(
         bot: Bot,
         chat_id: int,
@@ -76,8 +69,47 @@ async def send_and_delete(
         )
 
 
-@dp.message(F.voice)
-@dp.message(IsAdmin())
+def _make_text(task: Task) -> str:
+    lst = '\n'.join([f'• {d}' for d in task.details])
+    return f'{html.bold(task.summary)}\n\n{lst}'.strip()
+
+
+async def run_pending_tasks(bot: Bot) -> None:
+    while True:
+        tasks = storage.all()
+        logger.debug(f'Всего запланировано задач {len(tasks)}')
+        now = utils.now_moscow()
+        for task in tasks:
+            execution_datetime = dt.datetime.strptime(
+                    task.date,
+                    utils.TIME_FORMAT,
+                )
+            execution_datetime = execution_datetime.replace(
+                    tzinfo=utils.MOSCOW_TZ,
+                )
+            if now > execution_datetime:
+                kb = InlineKeyboardBuilder()
+                kb.button(
+                        text='Done!',
+                        callback_data='1',
+                    )
+                markup = kb.as_markup()
+                await bot.send_message(
+                        chat_id=user_id,
+                        text=_make_text(task),
+                        reply_markup=markup,
+                        disable_notification=False,
+                    )
+                storage.archive(task)
+        await asyncio.sleep(10)
+
+
+@dp.message(CommandStart(), IsAdmin())
+async def command_start_handler(message: Message) -> None:
+    await message.answer('Это личный бот-ассистент')
+
+
+@dp.message(F.voice, IsAdmin())
 async def voice_command_handler(message: Message) -> None:
     assert message.voice
     assert message.bot
@@ -116,55 +148,12 @@ async def voice_command_handler(message: Message) -> None:
         )
 
     await asyncio.sleep(30)
+    await message.delete()
     for res in responses:
         await message.bot.delete_message(
                 chat_id=user_id,
                 message_id=res.message_id,
             )
-
-
-def _make_text(task: Task) -> str:
-    ul_lst = as_marked_list(*task.details, marker='• ').as_html()
-    return f'{html.bold(task.summary)}\n\n{ul_lst}'
-
-
-async def run_pending_tasks(bot: Bot) -> None:
-    while True:
-        tasks = storage.all()
-        logger.debug(f'Всего запланировано задач {len(tasks)}')
-        now = utils.now_moscow()
-        for task in tasks:
-            execution_datetime = dt.datetime.strptime(
-                    task.date,
-                    utils.TIME_FORMAT,
-                )
-            execution_datetime = execution_datetime.replace(
-                    tzinfo=utils.MOSCOW_TZ,
-                )
-            if now > execution_datetime:
-                kb = InlineKeyboardBuilder()
-                kb.button(
-                        text='Done!',
-                        callback_data='1',
-                    )
-                markup = kb.as_markup()
-                await bot.send_message(
-                        chat_id=user_id,
-                        text=_make_text(task),
-                        reply_markup=markup,
-                        disable_notification=False,
-                    )
-                storage.archive(task)
-        await asyncio.sleep(10)
-
-
-@dp.callback_query()
-@dp.message(IsAdmin())
-async def handle_template_manager_cb(
-        cb: CallbackQuery,
-) -> None:
-    await cb.answer()
-    await cb.message.delete()
 
 
 async def _main() -> None:
@@ -183,6 +172,15 @@ async def _main() -> None:
             await schedule_job
         except asyncio.CancelledError:
             logging.info('Scheduler job cancelled successfully.')
+
+
+@dp.callback_query()
+@dp.message(IsAdmin())
+async def handle_template_manager_cb(
+        cb: CallbackQuery,
+) -> None:
+    await cb.answer()
+    await cb.message.delete()
 
 
 def main() -> None:
