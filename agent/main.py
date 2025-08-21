@@ -22,6 +22,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 
 from agent import ai
+from agent import fix
 from agent import utils
 from agent.prompts import SYSTEM_PROMPT
 from agent.todo import HERE
@@ -157,6 +158,7 @@ async def voice_command_handler(message: Message) -> None:
 
 
 async def _main() -> None:
+    fix.process_json_files(HERE / 'pending')
     bot = Bot(
             token=TOKEN,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
