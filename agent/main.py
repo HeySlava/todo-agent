@@ -22,7 +22,9 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 
 from agent import ai
+from agent import fix
 from agent import utils
+from agent.prompts import SYSTEM_PROMPT
 from agent.todo import HERE
 from agent.todo import storage
 from agent.todo import Task
@@ -128,7 +130,6 @@ async def voice_command_handler(message: Message) -> None:
     responses.append(await _msg(text='Отправляю файл на транскрибацию'))
     transcription = ai.convert_audio_to_text(output_file.as_posix())
     responses.append(await _msg(text='Запускаю агента'))
-    from agent.prompts import SYSTEM_PROMPT
     for s in ai.agent.stream(
             {
                 'messages':
@@ -157,6 +158,7 @@ async def voice_command_handler(message: Message) -> None:
 
 
 async def _main() -> None:
+    fix.process_json_files(HERE / 'pending')
     bot = Bot(
             token=TOKEN,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),

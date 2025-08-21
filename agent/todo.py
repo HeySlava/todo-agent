@@ -1,19 +1,35 @@
+import datetime as dt
 import json
 import logging
 from pathlib import Path
 from typing import Any
-from typing import NamedTuple
+
+from agent import utils
 
 
 HERE = Path.cwd() / 'files'
 logger = logging.getLogger(__file__)
 
 
-class Task(NamedTuple):
-    id_: str
-    date: str
-    summary: str
-    details: list[str]
+class Task:
+    def __init__(
+            self,
+            id_: str,
+            date: str,
+            summary: str,
+            details: list[str],
+    ) -> None:
+        self.id_ = id_
+        try:
+            dt.datetime.strptime(date, utils.TIME_FORMAT)
+        except ValueError:
+            raise ValueError(
+                    f'Invalid date format: {date}. '
+                    f'Expected format: {utils.TIME_FORMAT}'
+                )
+        self.date = date
+        self.summary = summary
+        self.details = details
 
     def as_dict(self) -> dict[str, Any]:
         return {
