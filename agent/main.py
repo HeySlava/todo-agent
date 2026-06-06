@@ -70,6 +70,43 @@ async def send_and_delete(
         )
 
 
+async def _run_agent(message: Message, user_text: str) -> list[Message]:
+    responses = []
+    _msg = functools.partial(
+            message.bot.send_message,
+            chat_id=user_id,
+        )
+    responses.append(await _msg(text='Запускаю агента'))
+    for s in ai.agent.stream(
+            {
+                'messages':
+                [
+                    SystemMessage(
+                        SYSTEM_PROMPT.format(datetime=utils.now_moscow()),
+                    ),
+                    HumanMessage(user_text),
+                ],
+            },
+            stream_mode='values'
+    ):
+        last_msg = s['messages'][-1]
+        msg = last_msg.pretty_repr()
+        responses.append(
+                await _msg(text=html.pre_language(msg, 'JSON')),
+        )
+    return responses
+
+
+async def _cleanup(message: Message, responses: list[Message]) -> None:
+    await asyncio.sleep(30)
+    await message.delete()
+    for res in responses:
+        await message.bot.delete_message(
+                chat_id=user_id,
+                message_id=res.message_id,
+            )
+
+
 def _make_text(task: Task) -> str:
     lst = '\n'.join([f'• {d}' for d in task.details])
     return f'{html.bold(task.summary)}\n\n{lst}'.strip()
@@ -128,32 +165,17 @@ async def voice_command_handler(message: Message) -> None:
     ffmpeg.input(dest_file.as_posix()).output(output_file.as_posix()).run()
     responses.append(await _msg(text='Отправляю файл на транскрибацию'))
     transcription = ai.convert_audio_to_text(output_file.as_posix())
-    responses.append(await _msg(text='Запускаю агента'))
-    for s in ai.agent.stream(
-            {
-                'messages':
-                [
-                    SystemMessage(
-                        SYSTEM_PROMPT.format(datetime=utils.now_moscow()),
-                    ),
-                    HumanMessage(transcription),
-                ],
-            },
-            stream_mode='values'
-    ):
-        last_msg = s['messages'][-1]
-        msg = last_msg.pretty_repr()
-        responses.append(
-                await _msg(text=html.pre_language(msg, 'JSON')),
-        )
+    agent_responses = await _run_agent(message, transcription)
+    responses.extend(agent_responses)
+    await _cleanup(message, responses)
 
-    await asyncio.sleep(30)
-    await message.delete()
-    for res in responses:
-        await message.bot.delete_message(
-                chat_id=user_id,
-                message_id=res.message_id,
-            )
+
+@dp.message(F.text, IsAdmin())
+async def text_command_handler(message: Message) -> None:
+    assert message.text
+    assert message.bot
+    responses = await _run_agent(message, message.text)
+    await _cleanup(message, responses)
 
 
 async def _main() -> None:
